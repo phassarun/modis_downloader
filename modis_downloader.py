@@ -1,6 +1,5 @@
 import concurrent.futures
 import os
-import re
 
 import requests
 from parsel import Selector
@@ -106,5 +105,3 @@ if __name__ == "__main__":
                 data = future.result()
             except Exception as exc:
                 print('%r generated an exception: %s' % (url, exc))
-
-
