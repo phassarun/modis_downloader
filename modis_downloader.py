@@ -1,5 +1,6 @@
 import concurrent.futures
 import os
+import sys
 
 import requests
 from parsel import Selector
@@ -10,12 +11,9 @@ def download_file(url, dir_name):
     dir_file = '{}/{}'.format(dir_name, file_name)
     if os.path.exists(dir_file):
         return False
-    
-    COOKIES = {
-        'DATA': 'XBOfnBHPhpkFeAuybxnSeAAAAD8'
-    }
+
     path_file_name = os.path.join(dir_name, file_name)
-    r = requests.get(url, allow_redirects=True, cookies=COOKIES)
+    r = requests.get(url, allow_redirects=True, cookies=cookies)
 
     # download file
     with open(path_file_name, 'wb') as file:
@@ -25,7 +23,8 @@ def download_file(url, dir_name):
 
 
 def create_folder(folder_name):
-    dir_name = 'export/{}'.format(folder_name)
+    dir_name = '{}/{}'.format(DIR_EXPORTS, folder_name)
+    
     # Create target Directory if don't exist
     if not os.path.exists(dir_name):
         os.mkdir(dir_name)
@@ -33,16 +32,15 @@ def create_folder(folder_name):
     return dir_name
 
 
-def get_folder_urls(ALLOW_YEARS):
-    base_url = 'https://e4ftl01.cr.usgs.gov/MOLT/MOD11A1.006/'
+def get_folder_urls(BASE_URL, ALLOW_YEARS):
     allow_year_str = '|'.join(ALLOW_YEARS)
     regex_pattern = r'^((%s)\.\d{2}\.\d{2})' % allow_year_str
 
-    r = requests.get(base_url, allow_redirects=True)
+    r = requests.get(BASE_URL, allow_redirects=True)
     sel = Selector(text=r.text)
     folder_list = sel.css('a::attr(href)').re(regex_pattern)
     folder_filtered_list = list(filter(lambda folder_name: '.' in folder_name, folder_list))
-    folder_urls = list(map(lambda folder_name: '%s/%s' % (base_url, folder_name), folder_filtered_list))
+    folder_urls = list(map(lambda folder_name: '%s/%s' % (BASE_URL, folder_name), folder_filtered_list))
     return folder_urls
 
 
@@ -87,15 +85,30 @@ def run_app(folder_url):
     return True
 
 
+def get_cookies(folder_url, ALLOW_FILE_NAME):
+    file_urls = get_file_urls(folder_url, ALLOW_FILE_NAME)
+    auth_url = requests.get(file_urls[0], allow_redirects=True).url
+    r = requests.get(auth_url, auth=(username, password))
+    cookies = dict(r.history[-1].cookies)
+    
+    return cookies
+
+
 ALLOW_YEARS = ['2018']
 ALLOW_FILE_NAME = ['h27v06', 'h27v07', 'h27v08', 'h28v07', 'h28v08']
+BASE_URL = 'https://e4ftl01.cr.usgs.gov/MOLT/MOD11A1.006/'
+DIR_EXPORTS = 'exports'
 
 if __name__ == "__main__":
-    dir_export = 'export'
-    if not os.path.exists(dir_export):
-        os.mkdir(dir_export)
+    username = sys.argv[1]
+    password = sys.argv[2]
     
-    folder_urls = get_folder_urls(ALLOW_YEARS)
+    if not os.path.exists(DIR_EXPORTS):
+        os.mkdir(DIR_EXPORTS)
+    
+    folder_urls = get_folder_urls(BASE_URL, ALLOW_YEARS)
+    cookies = get_cookies(folder_urls[0], ALLOW_FILE_NAME)
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
         # Start the load operations and mark each future with its URL
         future_to_url = {executor.submit(run_app, url): url for url in folder_urls}
